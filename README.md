@@ -48,3 +48,8 @@ Workflow файл: `.github/workflows/deploy.yml`.
 Он автоматически формирует `SOURCE_URL` для текущего commit (`https://github.com/<owner>/<repo>/archive/<sha>.tar.gz`) и вызывает VibeCode Deploy API для сервера `1bca73f7-c34d-4e7f-92a1-7f9aa893d67d`.
 
 > Секреты `PORTAL_MAIN` и `VIBE_MANAGE` можно хранить в GitHub Secrets для последующих интеграций, но в текущем deploy workflow используется только `VIBE_CODE_MAIN`.
+
+
+### Если в Actions предупреждение про Node.js 20
+GitHub переводит JavaScript actions c Node.js 20 на Node.js 24.
+В workflow уже добавлен флаг `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` и обновлен `actions/checkout` до `v5`, чтобы заранее использовать совместимый рантайм.
