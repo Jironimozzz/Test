@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bitrix24 Call Analytics Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Inter, Arial, sans-serif; margin: 0; background:#0f172a; color:#e2e8f0; }
+    .container{ max-width:1200px; margin:0 auto; padding:20px; }
+    .grid{ display:grid; gap:14px; grid-template-columns: repeat(12,1fr); }
+    .card{ background:#111827; border:1px solid #1f2937; border-radius:12px; padding:14px; }
+    .col-3{ grid-column:span 3; } .col-4{ grid-column:span 4; } .col-6{ grid-column:span 6; } .col-12{ grid-column:span 12; }
+    input,select,button{ width:100%; padding:10px; border-radius:8px; border:1px solid #334155; background:#0b1220; color:#e2e8f0; }
+    button{ cursor:pointer; background:#2563eb; border:none; font-weight:600; }
+    .kpi{ font-size:26px; font-weight:700; margin-top:4px; }
+    table{ width:100%; border-collapse:collapse; font-size:13px; }
+    th,td{ border-bottom:1px solid #1f2937; padding:8px; text-align:left; }
+    @media (max-width:900px){ .col-3,.col-4,.col-6{ grid-column:span 12; } }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>📞 Аналитика звонков Bitrix24</h1>
+  <div class="grid">
+    <div class="card col-6"><label>URL API (например ваш backend endpoint с JSON)</label><input id="apiUrl" placeholder="https://.../calls" /></div>
+    <div class="card col-3"><label>Период от</label><input id="fromDate" type="date"></div>
+    <div class="card col-3"><label>Период до</label><input id="toDate" type="date"></div>
+
+    <div class="card col-3"><label>Менеджер</label><select id="managerFilter"><option value="">Все</option></select></div>
+    <div class="card col-3"><label>Статус</label><select id="statusFilter"><option value="">Все</option></select></div>
+    <div class="card col-3"><label>Мин. длительность (сек)</label><input id="minDuration" type="number" value="0"></div>
+    <div class="card col-3"><button id="loadBtn">Загрузить и обновить</button></div>
+
+    <div class="card col-3"><div>Всего звонков</div><div id="kpiTotal" class="kpi">0</div></div>
+    <div class="card col-3"><div>Успешных звонков</div><div id="kpiSuccess" class="kpi">0</div></div>
+    <div class="card col-3"><div>Средняя длительность</div><div id="kpiAvg" class="kpi">0с</div></div>
+    <div class="card col-3"><div>Конверсия успешных</div><div id="kpiRate" class="kpi">0%</div></div>
+
+    <div class="card col-6"><canvas id="callsByDay"></canvas></div>
+    <div class="card col-6"><canvas id="callsByManager"></canvas></div>
+    <div class="card col-12"><h3>Последние звонки</h3><table id="callsTable"><thead><tr><th>Дата</th><th>Менеджер</th><th>Клиент</th><th>Длительность</th><th>Статус</th></tr></thead><tbody></tbody></table></div>
+  </div>
+</div>
+<script>
+const sampleData = [
+  {date:'2026-05-10T10:00:00Z', manager:'Иван', client:'ООО Ромашка', duration:180, status:'success'},
+  {date:'2026-05-10T12:00:00Z', manager:'Анна', client:'ИП Смирнов', duration:35, status:'failed'},
+  {date:'2026-05-11T09:30:00Z', manager:'Иван', client:'ЗАО Вектор', duration:220, status:'success'},
+  {date:'2026-05-12T16:10:00Z', manager:'Мария', client:'ООО Альфа', duration:95, status:'success'}
+];
+let allCalls = sampleData;
+let chartDay, chartManager;
+
+function normalize(c){
+  return {
+    date: c.date || c.call_date || c.createdAt,
+    manager: c.manager || c.assigned || c.user || 'Не указан',
+    client: c.client || c.phone || c.contact || '—',
+    duration: Number(c.duration || c.duration_sec || 0),
+    status: (c.status || c.result || 'unknown').toLowerCase()
+  }
+}
+
+async function loadCalls(){
+  const url = document.getElementById('apiUrl').value.trim();
+  if(!url){ allCalls = sampleData; return; }
+  const res = await fetch(url);
+  const json = await res.json();
+  const arr = Array.isArray(json) ? json : (json.data || json.calls || []);
+  allCalls = arr.map(normalize);
+}
+
+function filtered(){
+  const from = document.getElementById('fromDate').value;
+  const to = document.getElementById('toDate').value;
+  const manager = document.getElementById('managerFilter').value;
+  const status = document.getElementById('statusFilter').value;
+  const min = Number(document.getElementById('minDuration').value || 0);
+  return allCalls.filter(c=>{
+    const d = (c.date||'').slice(0,10);
+    if(from && d < from) return false;
+    if(to && d > to) return false;
+    if(manager && c.manager !== manager) return false;
+    if(status && c.status !== status) return false;
+    if(c.duration < min) return false;
+    return true;
+  });
+}
+
+function updateFilters(){
+  const managers=[...new Set(allCalls.map(x=>x.manager))];
+  const statuses=[...new Set(allCalls.map(x=>x.status))];
+  const mf=document.getElementById('managerFilter'); const sf=document.getElementById('statusFilter');
+  mf.innerHTML='<option value="">Все</option>'+managers.map(m=>`<option>${m}</option>`).join('');
+  sf.innerHTML='<option value="">Все</option>'+statuses.map(s=>`<option>${s}</option>`).join('');
+}
+
+function render(){
+  const data = filtered();
+  const success = data.filter(c=>c.status==='success').length;
+  const avg = data.length ? Math.round(data.reduce((a,b)=>a+b.duration,0)/data.length) : 0;
+  document.getElementById('kpiTotal').textContent=data.length;
+  document.getElementById('kpiSuccess').textContent=success;
+  document.getElementById('kpiAvg').textContent=avg+'с';
+  document.getElementById('kpiRate').textContent=(data.length?Math.round(success/data.length*100):0)+'%';
+
+  const byDay={}; data.forEach(c=>{const k=(c.date||'').slice(0,10)||'n/a'; byDay[k]=(byDay[k]||0)+1;});
+  const byManager={}; data.forEach(c=>{byManager[c.manager]=(byManager[c.manager]||0)+1;});
+
+  if(chartDay) chartDay.destroy(); if(chartManager) chartManager.destroy();
+  chartDay=new Chart(document.getElementById('callsByDay'),{type:'line',data:{labels:Object.keys(byDay),datasets:[{label:'Звонки по дням',data:Object.values(byDay)}]}});
+  chartManager=new Chart(document.getElementById('callsByManager'),{type:'bar',data:{labels:Object.keys(byManager),datasets:[{label:'Звонки по менеджерам',data:Object.values(byManager)}]}});
+
+  document.querySelector('#callsTable tbody').innerHTML=data.slice(-20).reverse().map(c=>`<tr><td>${(c.date||'').replace('T',' ').slice(0,16)}</td><td>${c.manager}</td><td>${c.client}</td><td>${c.duration}s</td><td>${c.status}</td></tr>`).join('');
+}
+
+document.getElementById('loadBtn').addEventListener('click', async ()=>{
+  try { await loadCalls(); updateFilters(); render(); }
+  catch(e){ alert('Ошибка загрузки: '+e.message); }
+});
+
+updateFilters(); render();
+</script>
+</body>
+</html>
