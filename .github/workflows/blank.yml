@@ -5,6 +5,9 @@ on:
   push:
     branches: ["main"]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: read
 
@@ -15,17 +18,16 @@ jobs:
       SERVER_ID: 1bca73f7-c34d-4e7f-92a1-7f9aa893d67d
       VIBECODE_API_BASE: https://vibecode.bitrix24.tech/v1
       VIBE_CODE_MAIN: ${{ secrets.VIBE_CODE_MAIN }}
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Validate required secret
+      - name: Validate required secrets
         shell: bash
         run: |
           set -euo pipefail
           if [[ -z "${VIBE_CODE_MAIN:-}" ]]; then
-            echo "Secret VIBE_CODE_MAIN is not set"
+            echo "Secret VIBE_CODE_MAIN is not set" >&2
             exit 1
           fi
 
@@ -50,6 +52,6 @@ jobs:
           cat "$response_file"
 
           if [[ "$http_code" -lt 200 || "$http_code" -ge 300 ]]; then
-            echo "Deployment trigger failed"
+            echo "Deployment trigger failed" >&2
             exit 1
           fi
