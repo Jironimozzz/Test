@@ -1,0 +1,55 @@
+name: Deploy to VibeCode
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SERVER_ID: 1bca73f7-c34d-4e7f-92a1-7f9aa893d67d
+      VIBECODE_API_BASE: https://vibecode.bitrix24.tech/v1
+      VIBE_CODE_MAIN: ${{ secrets.VIBE_CODE_MAIN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${VIBE_CODE_MAIN:-}" ]]; then
+            echo "Secret VIBE_CODE_MAIN is not set"
+            exit 1
+          fi
+
+      - name: Build source archive URL for current commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "SOURCE_URL=https://github.com/${GITHUB_REPOSITORY}/archive/${GITHUB_SHA}.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Trigger VibeCode deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          http_code=$(curl -sS -o "$response_file" -w "%{http_code}" \
+            -X POST "$VIBECODE_API_BASE/infra/servers/$SERVER_ID/deploy?stream=false" \
+            -H "X-Api-Key: $VIBE_CODE_MAIN" \
+            -H "Content-Type: application/json" \
+            -d "{\"source\":{\"url\":\"$SOURCE_URL\"}}")
+
+          echo "Deploy API HTTP status: $http_code"
+          cat "$response_file"
+
+          if [[ "$http_code" -lt 200 || "$http_code" -ge 300 ]]; then
+            echo "Deployment trigger failed"
+            exit 1
+          fi
