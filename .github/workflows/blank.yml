@@ -42,11 +42,18 @@ jobs:
         run: |
           set -euo pipefail
           response_file="$(mktemp)"
+
+          payload=$(jq -nc \
+            --arg source_url "$SOURCE_URL" \
+            --arg start "cd /opt/app && npx serve -s . -l 3000" \
+            --arg install "cd /opt/app && (npm ci --omit=dev || npm install --omit=dev || true)" \
+            '{source:{url:$source_url},start:$start,install:$install,runtime:"node20",port:3000}')
+
           http_code=$(curl -sS -o "$response_file" -w "%{http_code}" \
             -X POST "$VIBECODE_API_BASE/infra/servers/$SERVER_ID/deploy?stream=false" \
             -H "X-Api-Key: $VIBE_CODE_MAIN" \
             -H "Content-Type: application/json" \
-            -d "{\"source\":{\"url\":\"$SOURCE_URL\"}}")
+            -d "$payload")
 
           echo "Deploy API HTTP status: $http_code"
           cat "$response_file"
