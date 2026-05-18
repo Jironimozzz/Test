@@ -53,3 +53,13 @@ Workflow файл: `.github/workflows/deploy.yml`.
 ### Если в Actions предупреждение про Node.js 20
 GitHub переводит JavaScript actions c Node.js 20 на Node.js 24.
 В workflow уже добавлен флаг `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` и обновлен `actions/checkout` до `v5`, чтобы заранее использовать совместимый рантайм.
+
+### Ошибка `VALIDATION_ERROR` с `start: Required`
+Если VibeCode Deploy API отвечает `400 VALIDATION_ERROR` и пишет, что поле `start` обязательно, значит в запросе был неполный payload.
+
+В актуальном workflow отправляется расширенный payload с обязательными полями:
+- `source.url`
+- `start`
+- `install`
+- `runtime`
+- `port`
